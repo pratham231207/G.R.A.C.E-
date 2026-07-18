@@ -1071,19 +1071,24 @@ async def start_services(grace_system):
     wake_variants = ["grace", "grey", "great", "grapes", "pace", "mace", "shapes", "race", "dress"]
 
     r = sr.Recognizer()
-    with sr.Microphone() as m:
-        while True:
-            try:
-                r.adjust_for_ambient_noise(m, duration=0.5)
-                audio = r.listen(m, timeout=1, phrase_time_limit=4)
-                cmd = r.recognize_google(audio).lower()
-                
-                if any(variant in cmd for variant in wake_variants):
-                    trigger = next(v for v in wake_variants if v in cmd)
-                    clean_cmd = cmd.replace(trigger, "").strip()
-                    await grace_system.process_logic(clean_cmd)
-            except: 
-                await asyncio.sleep(0.1)
+    mic = sr.Microphone()
+
+    def listen_and_recognize():
+        with mic as m:
+            r.adjust_for_ambient_noise(m, duration=0.5)
+            audio = r.listen(m, timeout=1, phrase_time_limit=4)
+        return r.recognize_google(audio).lower()
+
+    while True:
+        try:
+            cmd = await asyncio.to_thread(listen_and_recognize)
+
+            if any(variant in cmd for variant in wake_variants):
+                trigger = next(v for v in wake_variants if v in cmd)
+                clean_cmd = cmd.replace(trigger, "").strip()
+                await grace_system.process_logic(clean_cmd)
+        except:
+            await asyncio.sleep(0.1)
 
 if __name__ == "__main__":
     pygame.mixer.init()
