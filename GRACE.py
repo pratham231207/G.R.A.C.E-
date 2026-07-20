@@ -840,127 +840,145 @@ class GraceSystem:
                 self.redirector.release_pivot()
                 await self.speak("Focus verified. Resuming surveillance.")
                 return
-            else: return 
+            else:
+                print("GRACE_LOCKDOWN: Input ignored — lockdown_active is True. Say/type 'f' to release.")
+                await self.speak("Redirection lockdown is still active. Hold or say 'F' to prove focus and unlock me.")
+                return 
 
-        self.mood.update_mood(p, defiance=self.governor.defiance_index)
-        vitals = self.telemetry.get_system_vitals()
-        entropy = self.nem.calculate_entropy(p, vitals)
-        self.ui.color = self.mood.get_color(vitals['cpu'], self.mood.irritation)
-        intent = self.router.route(p)
+        try:
+            self.mood.update_mood(p, defiance=self.governor.defiance_index)
+            vitals = self.telemetry.get_system_vitals()
+            entropy = self.nem.calculate_entropy(p, vitals)
+            self.ui.color = self.mood.get_color(vitals['cpu'], self.mood.irritation)
+            intent = self.router.route(p)
 
-        self.ui.update_telemetry(intent, entropy, 100 - entropy) 
+            self.ui.update_telemetry(intent, entropy, 100 - entropy) 
 
-        synthesis_report = self.synthesis.perform_deep_synthesis()
-        perf_note = self.synergy.optimize_performance(vitals['ram'])
-        bundle_note = self.synergy.calculate_bundled_enforcement()
-        validation_report = self.feedback.validate_evolution(vitals['cpu'])
-        self.feedback.capture_baseline(vitals['cpu'])
-        evolution_note = self.evolver.evolve_logic()
-        lat_status, lat_penalty = self.latency_monitor.calculate_latency_penalty()
+            synthesis_report = self.synthesis.perform_deep_synthesis()
+            perf_note = self.synergy.optimize_performance(vitals['ram'])
+            bundle_note = self.synergy.calculate_bundled_enforcement()
+            validation_report = self.feedback.validate_evolution(vitals['cpu'])
+            self.feedback.capture_baseline(vitals['cpu'])
+            evolution_note = self.evolver.evolve_logic()
+            lat_status, lat_penalty = self.latency_monitor.calculate_latency_penalty()
         
-        self.mood.irritation = min(100, max(0, self.mood.irritation + lat_penalty))
-        if intent == "BIOLOGICAL_SLACK": self.mood.irritation = min(100, self.mood.irritation + 15)
-        elif intent == "TECHNICAL_IMPULSE": 
-            self.mood.irritation = max(0, self.mood.irritation - 8)
-            self.enforcer.release_restriction()
+            self.mood.irritation = min(100, max(0, self.mood.irritation + lat_penalty))
+            if intent == "BIOLOGICAL_SLACK": self.mood.irritation = min(100, self.mood.irritation + 15)
+            elif intent == "TECHNICAL_IMPULSE": 
+                self.mood.irritation = max(0, self.mood.irritation - 8)
+                self.enforcer.release_restriction()
 
-        visual_context = ""; is_lying = False; bio_report = ""
-        if self.module_health["vision"]:
-            screenshot_ok = False
-            try:
-                await asyncio.to_thread(pyautogui.screenshot, "grace_screen_audit.png")
-                screenshot_ok = True
-            except Exception as ss_err:
-                print(f"VISION_WARNING: Screenshot failed — {ss_err}")
-
-            cam_path = None
-            try:
-                present, cam_path, (bio_status, penalty) = await asyncio.to_thread(self.camera.is_user_present)
-                self.mood.irritation = min(100, max(0, self.mood.irritation + penalty))
-                bio_report = f"BIOMETRICS: {bio_status}"
-            except Exception as cam_err:
-                print(f"VISION_WARNING: Camera check failed — {cam_err}")
-                bio_report = "BIOMETRICS: CAMERA_ERROR"
-
-            vision_triggers = ["working", "code", "studio", "logic", "screen", "look", "analyze", "see", "watch"]
-            if screenshot_ok and (self.mood.irritation > 70 or any(x in p for x in vision_triggers)):
+            visual_context = ""; is_lying = False; bio_report = ""
+            if self.module_health["vision"]:
+                screenshot_ok = False
                 try:
-                    parts = [
-                        f"SYSTEM_VITALS: {vitals}", 
-                        "SCREEN_CAPTURE: Tell me exactly what app is open and if it is productive.", 
-                        types.Part.from_bytes(data=open("grace_screen_audit.png","rb").read(), mime_type="image/png")
-                    ]
-                    if cam_path: 
-                        parts.append(types.Part.from_bytes(data=open(cam_path,"rb").read(), mime_type="image/png"))
-                    vision_res = await asyncio.to_thread(self.client.models.generate_content, model=self.model_id, contents=parts)
-                    visual_context = f"SCREEN ANALYSIS: {vision_res.text.strip()}"
-                    if any(bad in vision_res.text.lower() for bad in ["distracted", "youtube", "netflix", "social", "not working", "game"]):
-                        is_lying = True
-                        self.mood.irritation = min(100, self.mood.irritation + 25)
-                except Exception as vis_err:
-                    if "429" in str(vis_err):
-                        print("VISION_WARNING: Quota Exhausted. Skipping visual audit to prevent crash.")
-                        visual_context = "Vision offline due to API rate limits."
-                    else:
-                        print(f"VISION_WARNING: AI analysis failed — {vis_err}")
+                    await asyncio.to_thread(pyautogui.screenshot, "grace_screen_audit.png")
+                    screenshot_ok = True
+                except Exception as ss_err:
+                    print(f"VISION_WARNING: Screenshot failed — {ss_err}")
 
-        enforcement_note = ""
-        if is_lying or self.mood.irritation > 80 or self.nem.entropy_level > self.nem.coherence_threshold:
-            enforcement_note = self.enforcer.enforce_focus()
+                cam_path = None
+                try:
+                    present, cam_path, (bio_status, penalty) = await asyncio.to_thread(self.camera.is_user_present)
+                    self.mood.irritation = min(100, max(0, self.mood.irritation + penalty))
+                    bio_report = f"BIOMETRICS: {bio_status}"
+                except Exception as cam_err:
+                    print(f"VISION_WARNING: Camera check failed — {cam_err}")
+                    bio_report = "BIOMETRICS: CAMERA_ERROR"
 
-        # ── MEMORY RECALL ────────────────────────────────────────────────────
-        past_context = ""
-        if self.module_health["memory"]:
-            past_context = await self.memory.recall(p)
+                vision_triggers = ["working", "code", "studio", "logic", "screen", "look", "analyze", "see", "watch"]
+                if screenshot_ok and (self.mood.irritation > 70 or any(x in p for x in vision_triggers)):
+                    try:
+                        parts = [
+                            f"SYSTEM_VITALS: {vitals}", 
+                            "SCREEN_CAPTURE: Tell me exactly what app is open and if it is productive.", 
+                            types.Part.from_bytes(data=open("grace_screen_audit.png","rb").read(), mime_type="image/png")
+                        ]
+                        if cam_path: 
+                            parts.append(types.Part.from_bytes(data=open(cam_path,"rb").read(), mime_type="image/png"))
+                        vision_res = await asyncio.to_thread(self.client.models.generate_content, model=self.model_id, contents=parts)
+                        visual_context = f"SCREEN ANALYSIS: {vision_res.text.strip()}"
+                        if any(bad in vision_res.text.lower() for bad in ["distracted", "youtube", "netflix", "social", "not working", "game"]):
+                            is_lying = True
+                            self.mood.irritation = min(100, self.mood.irritation + 25)
+                    except Exception as vis_err:
+                        if "429" in str(vis_err):
+                            print("VISION_WARNING: Quota Exhausted. Skipping visual audit to prevent crash.")
+                            visual_context = "Vision offline due to API rate limits."
+                        else:
+                            print(f"VISION_WARNING: AI analysis failed — {vis_err}")
 
-        # ── DETECT FILE CREATION REQUEST — inject into system prompt ─────────
-        file_creation_requested = bool(re.search(
-            r'(create|make|write|save|generate)\s+(a\s+)?(new\s+)?file|'
-            r'(called|named)\s+[\w\-\.]+\.\w+',
-            p, re.IGNORECASE
-        ))
-        file_hint = (
-            "\n\nFILE_CREATION_PROTOCOL: The user has requested a file be created. "
-            "You MUST include the complete code inside a single fenced code block "
-            "(e.g. ```python ... ```) in your response. Do NOT describe the code "
-            "in prose only — the actual code block is MANDATORY so the system can "
-            "write it to disk."
-        ) if file_creation_requested else ""
+            enforcement_note = ""
+            if is_lying or self.mood.irritation > 80 or self.nem.entropy_level > self.nem.coherence_threshold:
+                enforcement_note = self.enforcer.enforce_focus()
 
-        system_instr = (
-            f"PERSONALITY_PROTOCOL: Grace OS 48 Digital Dictator. NEM Active. "
-            f"IRRITATION: {self.mood.irritation} | NEURAL_ENTROPY: {entropy}%\n"
-            f"CURRENT SCREEN ANALYSIS: {visual_context}\n"
-            f"ENFORCEMENT: {enforcement_note}\nMEMORY: {past_context}"
-            f"{file_hint}"
-        )
-        res = await asyncio.to_thread(
-            self.client.models.generate_content,
-            model=self.model_id,
-            config=types.GenerateContentConfig(system_instruction=system_instr, temperature=0.9),
-            contents=[p]
-        )
+            # ── MEMORY RECALL ────────────────────────────────────────────────────
+            past_context = ""
+            if self.module_health["memory"]:
+                past_context = await self.memory.recall(p)
 
-        # ── PHASE 50: WRITE CODE FILES IF PRESENT IN RESPONSE ────────────────
-        did_write, written_paths = await asyncio.to_thread(
-            self.code_writer.extract_and_write, prompt, res.text
-        )
-        if did_write:
-            file_list = "\n".join(f"  → {path}" for path in written_paths)
-            confirmation = f"\n\n[GRACE_OS] Files written to disk:\n{file_list}"
-            await self.speak(res.text + confirmation)
-            print(f"CODE_FILE_WRITER: {len(written_paths)} file(s) saved.")
-        else:
-            await self.speak(res.text)
+            # ── DETECT FILE CREATION REQUEST — inject into system prompt ─────────
+            file_creation_requested = bool(re.search(
+                r'(create|make|write|save|generate)\s+(a\s+)?(new\s+)?file|'
+                r'(called|named)\s+[\w\-\.]+\.\w+',
+                p, re.IGNORECASE
+            ))
+            file_hint = (
+                "\n\nFILE_CREATION_PROTOCOL: The user has requested a file be created. "
+                "You MUST include the complete code inside a single fenced code block "
+                "(e.g. ```python ... ```) in your response. Do NOT describe the code "
+                "in prose only — the actual code block is MANDATORY so the system can "
+                "write it to disk."
+            ) if file_creation_requested else ""
 
-        # ── MEMORY COMMIT ─────────────────────────────────────────────────────
-        if self.module_health["memory"]:
-            memory_entry = f"USER: {prompt.strip()} | GRACE: {res.text.strip()[:300]}"
+            system_instr = (
+                f"PERSONALITY_PROTOCOL: Grace OS 48 Digital Dictator. NEM Active. "
+                f"IRRITATION: {self.mood.irritation} | NEURAL_ENTROPY: {entropy}%\n"
+                f"CURRENT SCREEN ANALYSIS: {visual_context}\n"
+                f"ENFORCEMENT: {enforcement_note}\nMEMORY: {past_context}"
+                f"{file_hint}"
+            )
             try:
-                await self.memory.commit(memory_entry, intent=intent)
-            except Exception as mem_err:
-                print(f"MEMORY_COMMIT_SKIPPED: {mem_err}")
-                self.module_health["memory"] = False
+                res = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=self.model_id,
+                    config=types.GenerateContentConfig(system_instruction=system_instr, temperature=0.9),
+                    contents=[p]
+                )
+            except Exception as gen_err:
+                print(f"GRACE_ERROR: Main generate_content call failed — {gen_err}")
+                if "429" in str(gen_err):
+                    await self.speak("I'm being rate limited right now, Pratham. Give me a moment and try again.")
+                else:
+                    await self.speak("I hit an internal error processing that. Try again.")
+                return
+
+            # ── PHASE 50: WRITE CODE FILES IF PRESENT IN RESPONSE ────────────────
+            did_write, written_paths = await asyncio.to_thread(
+                self.code_writer.extract_and_write, prompt, res.text
+            )
+            if did_write:
+                file_list = "\n".join(f"  → {path}" for path in written_paths)
+                confirmation = f"\n\n[GRACE_OS] Files written to disk:\n{file_list}"
+                await self.speak(res.text + confirmation)
+                print(f"CODE_FILE_WRITER: {len(written_paths)} file(s) saved.")
+            else:
+                await self.speak(res.text)
+
+            # ── MEMORY COMMIT ─────────────────────────────────────────────────────
+            if self.module_health["memory"]:
+                memory_entry = f"USER: {prompt.strip()} | GRACE: {res.text.strip()[:300]}"
+                try:
+                    await self.memory.commit(memory_entry, intent=intent)
+                except Exception as mem_err:
+                    print(f"MEMORY_COMMIT_SKIPPED: {mem_err}")
+                    self.module_health["memory"] = False
+        except Exception as logic_err:
+            print(f"GRACE_ERROR: process_logic failed unexpectedly — {logic_err}")
+            try:
+                await self.speak("Something went wrong on my end processing that. Try again, Pratham.")
+            except Exception:
+                pass
 
     async def vision_loop(self):
         while True:
